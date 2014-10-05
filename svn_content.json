@@ -1,0 +1,33 @@
+{
+"/netcool/probes/rules/test-probes/trunk":  {
+ "time": 1401459805.158819, 
+ "properties": {
+  "probe_name": "test-probes"
+ }, 
+ "size": -1, 
+ "last_author": "a566799", 
+ "revision": "<Revision kind=number 4543>", 
+ "kind": "dir"
+}
+,"/netcool/probes/rules/test-probes/trunk/socket":  {
+ "size": -1, 
+ "time": 1399494925.283342, 
+ "last_author": "a566799", 
+ "revision": "<Revision kind=number 4456>", 
+ "kind": "dir"
+}
+,"/netcool/probes/rules/test-probes/trunk/socket/socket.rules":  {
+ "size": 3943, 
+ "time": 1399494925.283342, 
+ "last_author": "a566799", 
+ "revision": "<Revision kind=number 4456>", 
+ "kind": "file"
+}
+,"/netcool/probes/rules/test-probes/trunk/svn_content.json":  {
+ "size": 0, 
+ "time": 1401459805.158819, 
+ "last_author": "a566799", 
+ "revision": "<Revision kind=number 4543>", 
+ "kind": "file"
+}
+}
