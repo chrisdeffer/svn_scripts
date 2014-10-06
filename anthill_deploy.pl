@@ -1,6 +1,6 @@
-##!/opt/netcool/wfperlexe/bin/perl
-#use lib "/opt/netcool/omnibus/probes/wfotherscripts/anthill_deploy";
-use lib "anthill_deploy";
+#!/opt/netcool/wfperlexe/bin/perl
+
+use lib "/opt/netcool/omnibus/probes/wfotherscripts/svn_script_modules";
 use Utils;
 use Netcool;
 use Log::Log4perl;
@@ -9,32 +9,48 @@ use strict;
 
 ####################################################################################
 ## - anthill_deploy.pl
-## * $0 is launched with 4 params:
+## * script is launched with 4 params:
 ## $1 = path (svn config file path)
 ## $2 = build (anthill build number)
 ## $3 = package (anthill package name)
 ## $4 = job type (pre or post)
 ## $5 = the probe/wfotherscripts directory
 ##
+## Paths/Placement:
 ##
-##
-## Paths/Placement
-##
-## * anthill_deploy_hook.sh: located in wfotherscripts and each '$R/probename' directory
+## * anthill_deploy_hook.sh: located in wfotherscripts and each '$R/<probename>/<probefolder>' directory
 ## * anthill_deploy.pl: located in 'wfotherscripts'
-## * There should be directory 'wfotherscripts/anthill_deploy'. This dir contains
+## * There should be directory 'wfotherscripts/svn_script_modules/'. This dir contains
 ##   the perl modules (Utils.pm/Netcool.pm) used by this program
-## * log.conf and ad.conf should be in 'wfotherscripts/anthill_deploy'
+## * log.conf in 'wfotherscripts/'
+## * All individual probe conf files should be in: /opt/netcool/etc/props/svn_script_cfgs/
+## * The single config file wfotherscripts items should be in /opt/netcool/etc/props/svn_script_cfgs/ (on host server)
+##  probe config file info below
+##
+##  main = filename of rules file
+##  path = path to rules file
+##  svn_type= deploy type: 'rules' or 'wfotherscripts'
+##  # 1 = delete, 0 = ignore
+##  invalid_files = what to do with non-existant svn managed files (1=remove, 0=nothing)
+##  # stop services/scripts
+##  pre = what actions and processes to STOP during a PRE deployment
+##  # start services/scripts
+##  post = what actions and processes to START during a POST deployment (entry script name or processes separated by comma)
+##  common = Relates to the 'include-common' directory. If deployment is exclusive to this directory,
+##           certain scripts may need to be run. (UNI or TRAP)
+##  nco_p_syntax = USE THE FOLLOWING FORMAT: /opt/netcool/omnibus/probes/nco_p_syntax -server <OS NAME> -rulesfile
+##  # Files to ignore in svn to host comparison
+##  white_list = List exact file names to ignore when script is run separated by comma(eg. wf_syslog.rules, ios.match.lookup, etc)
 ##
 ## Process:
 ##
 ##
 ## anthill_deploy_hook.sh $1 $2 $3 $4 $5
 ##
-## 1. Anthill calls this script from a launcher script with params
+## 1. Anthill calls this script from shell script with params
 ##    before or after deployment (pre/post)
 ## 2. log.conf is parsed to setup Log4Perl logging facility
-## 3. Probe host is determined (where am I eing launched from?)
+## 3. Probe host is determined (where am I being launched from?)
 ## 4. Parse 'svn_content.json' (param $1 = /path/to/json) and build file->dir perl map
 ## 5. Parse ad.conf (ad.conf is in each probe dir and wfotherscripts. Used for getting rules file name)
 ## 7. If this run is for a probe (non wfotherscript), do syntax check and HUP probe (IF POST DEPLOYMENT)
@@ -43,23 +59,38 @@ use strict;
 ## 10. Log differences
 ## 11. Delete files not in svn
 ##
+##
+##
+##
+##  UPDATES
+##
+##
 ### 09-18-14:CJM - added code to identify files that contain multiple extensions (eg .rules.DATE, .lookup.ORIG, etc)
 ###                These files are likely not needed in svn and are noted in the logs
+### 09-29-14:CJM - added config param 'white_list' to <probe_name>.conf so user can specify filenames to ignore
 ##
 ####################################################################################
+
 my $deploytype = 0;
-my ($path,$rules,$full_path_rules,$syntax_results,$syntax_command,
-    $netcool,$syntax,$results,$stat,$common_dir,
-    $svn_type,$name,$json,$remove, $temp_file,
-    $remove_file,$ignore_files,$ignore_me);
+my $path;
+my $rules;
+my $full_path_rules;
+my $syntax_command;
+my $netcool;
+my $syntax_results;
+my $stat;
+my $common_dir;
+my $svn_type;
+my $name;
+my $json;
+my $remove;
+my $temp_file;
+my $remove_file;
+my $ignore_files;
+my $ignore_me;
 
-
-   
 # Load the logging config file located in wfotherscripts/deployscripts
-#my $log_conf = "/opt/netcool/omnibus/probes/wfotherscripts/log.conf";
-
-# DEBUG use locally defined conf file
-my $log_conf = "log.conf";
+my $log_conf = "/opt/netcool/omnibus/probes/wfotherscripts/log.conf";
 
 Log::Log4perl::init($log_conf);
 my $conf = Log::Log4perl->get_logger();
@@ -72,31 +103,28 @@ if ($num_args != 5)
   print "\nUsage: $0 param1 param2 param3 param4 param5\n";
   exit;
 }
+
 # Get local path from hook script
 my $cd = $ARGV[4];
 
-#### DEBUG BELOW!!! ovveride (current dir) and probe/dir name for testing ...
-#$cd = "/opt/netcool/etc/rules/test-probes/socket";
-$cd = "/opt/netcool/etc/rules/syslog-probes/wf_syslog";
-#$cd = "/opt/netcool/etc/rules/trap-probes/wfmttrapduni";
-# Create new "Utils" object
 my $info = new Utils;
 
 # Get current host name
 my $host = $info->{probe_host};
 
-# Extract out the root folder name for this run 
+# Extract out the root folder name for this run
 my @tmps = split('/',$cd);
 
 # Get last dir name
 $name = @tmps[-1];
+chomp($name);
 
 $conf->debug("USING config file: $name.conf");
 
 # Set up this run using the configuration file
 $info->setup("/opt/netcool/etc/props/svn_script_cfgs/$name."."conf");
 
-# Get "common" folder type (common snmp or common socket - if common snmp, further actions must be run to 
+# Get "common" folder type (common snmp or common socket - if common snmp, further actions must be run to
 # restart probes/scripts that depend on the common-snmp dir)
 $common_dir = $info->{common_dir};
 
@@ -116,11 +144,7 @@ $conf->debug("Working with DIR: $cd");
 $conf->debug("Folder name: $name");
 $conf->debug("Will delete non-svn files (1=true, 0=false): $remove");
 
-## DEBUG BELOW, overriding svn_content
-$info->set(svn_json => "/opt/netcool/etc/rules/syslog-probes/wf_syslog/svn_content.json");
-#$info->set(svn_json => "$cd"."/svn_content.json");
-
-chomp($name);
+$info->set(svn_json => "$cd"."/svn_content.json");
 
 $path = $cd;
 
@@ -128,7 +152,7 @@ $path = $cd;
 $rules = $info->get('rules');
 
 if($rules=~/"wfotherscripts"/)
-{  
+{
     # this is a non rules file anthill deployment
    $deploytype = 1;
 }
@@ -166,8 +190,7 @@ if($deploytype == 0)
 
     # set the syntax check command
     $netcool->set(syntax => $syntax_command);
-
-    # pass in rules to syntax_check
+  # pass in rules to syntax_check
     $syntax_results = $netcool->syntax_check();
 
     if($syntax_results == 1)
@@ -208,7 +231,7 @@ while ( my ( $key, $value ) = each %local_files_ref ) {
 
             }
             else
-            {            
+            {
                 $info->{invalid_file} = $temp_file;
                 # unlink file
                 $info->remove_file($info->{invalid_file});

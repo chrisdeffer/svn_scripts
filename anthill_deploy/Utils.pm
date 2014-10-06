@@ -26,11 +26,12 @@ sub new
     my $invalid_file = shift || "";
     my $pre = shift || "";
     my $post = shift || "";
-    my $white_list = shift || "";
+    my $white_list || "";
     $self->{pre} = $pre;
     $self->{post} = $post;
+    $self->{svnref} = $svnref;
     $self->{invalid_file} = $invalid_file;
-    $self->{svn_json} = $svn_json; 
+    $self->{svn_json} = $svn_json;
     $self->{probe_host} = $probe_host;
     $self->{svn_file_map} = %svn_file_map;
     $self->{host_file_map} = %host_file_map;
@@ -43,7 +44,7 @@ sub new
     $self->{svn_type} = $svn_type;
     $self->{json} = $svn_type;
     $self->{white_list} = $white_list;
-    bless $self, $class; 
+    bless $self, $class;
     return $self;
 }
 
@@ -59,21 +60,20 @@ sub get
     my $self = shift;
     my $field = shift;
     return $self->{$field};
-
 }
 
-sub create_svn_container 
+sub create_svn_container
 {
     #######################################################
     # create_svn_container: returns hash
     #
-    # This method reads the svn_content.json file and 
+    # This method reads the svn_content.json file and
     # converts the svn path to the path on the server.
     # Also creates a hash (filename->dir) to be used
-    # to compare against the local files hash. 
+    # to compare against the local files hash.
     #######################################################
 
-    
+
     my $self = shift;
     my $inpath = shift;
     my $json = $self->{svn_json};
@@ -103,10 +103,10 @@ sub create_svn_container
           chomp($corrected_path);
           if($corrected_path=~/\..*\..*/)
           {
-            # tmp array to separate the directory from the svnentry 
+            # tmp array to separate the directory from the svnentry
             my @tmps = split('/',$corrected_path);
 
-            # Get last element (corrected_path) 
+            # Get last element (corrected_path)
             my $tmpfile = @tmps[-1];
             chomp($tmpfile);
 
@@ -118,10 +118,10 @@ sub create_svn_container
             $svn_file_map{$tmpfile} = "$corrected_path";
           }
          # Check if file in svn contains multiple file extensions (eg .rules.orig.020314 - these files likely DO NOT belong in SVN)
-          if($svnentry=~/(\.lookup\.|\.rules\.|\.pl\.)/)                
-          { 
-            print "Invalid file?: $svnentry\n"; 
-          }              
+          if($svnentry=~/(\.lookup\.|\.rules\.|\.pl\.)/)
+          {
+  print "Invalid file?: $svnentry\n";
+          }
         }
 
       }
@@ -165,37 +165,36 @@ sub remove_file
 
     # Invalid file name
     my $file_to_remove = shift;
-   
+
     # $remove value (1 or 0)
     my $tmp = shift;
-    
+
     # Where to place the copied files
     my $ext = "/tmp";
     copy($file_to_remove, $ext);
 
     # Get remove flag
-    # If remove == 1, trash it 
+    # If remove == 1, trash it
         if($tmp == 1)
         {
             #unlink $file_to_remove;
-            print "removed $file_to_remove\n"; 
+            print "removed $file_to_remove\n";
         }
-     
-    return $self; 
+   return $self;
 }
 
 sub map_local_files
 {
     #######################################################
     # map_local_files: returns local file hash
-    # 
+    #
     # This method takes all the paths ($value) from the
     # svn container and slurps in all the file names
     # n the path on local host. This creates the "host_file_map"
     # container to be used for comparison against svn_file_map.
     #
     ######################################################
- 
+
     my $self = shift;
 
     my @local_files;
@@ -203,7 +202,7 @@ sub map_local_files
       if ( -e $value )
       {
         opendir( DIR, $value );
-        @local_files = readdir(DIR); 
+        @local_files = readdir(DIR);
         foreach (@local_files)
         {
            if ( $_ =~ /^[\w-]+\..*/ )
@@ -224,7 +223,7 @@ sub whitelist
 {
 
     my $self = shift;
-    # File to check against white list 
+    # File to check against white list
     my $file_wl = shift;
     my $tmp = $self->{white_list};
     my @wl = split(',',$tmp);
@@ -235,29 +234,29 @@ sub whitelist
         $ret = 1;
     }
 
-    return $ret; 
+    return $ret;
 
 }
 
 sub get_file_dates
 {
     my $self = shift;
-    return %filedate;
+  return %filedate;
 }
 
 sub setup
 {
     #######################################################
-    # set up: populates instance variables 
+    # set up: populates instance variables
     #
     # This method populates the instance vars defined in
     # Utils.pm. The source is the probe.conf file.
     #######################################################
     my $self = shift;
     my $cfg = shift;
-    my ($param1,$param2); 
+    my ($param1,$param2);
     open CFGFILE, "$cfg" or die "Prolems opening : $!";
-    foreach my $line (<CFGFILE>) 
+    foreach my $line (<CFGFILE>)
     {
         #GET line: main: "<rules_file_name.rules>"
         if($line =~ m/main/)
@@ -303,14 +302,14 @@ sub setup
             $tmp = $param2;
             chomp($tmp);
             $self->{json} = $tmp;
-       }
+		}
        if($line =~ m/invalid_files/)
        {
             ($param1, $param2) = split(':',$line);
             $tmp = $param2;
             chomp($tmp);
             $self->{delete} = $tmp;
-       } 
+       }
        if($line =~ m/pre/)
        {
 
@@ -325,7 +324,7 @@ sub setup
             $tmp = $param2;
             chomp($tmp);
             $self->{white_list} = $tmp;
-       } 
+       }
 
     }
     return $self;
