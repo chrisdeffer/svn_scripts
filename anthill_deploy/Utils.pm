@@ -1,6 +1,6 @@
 package Utils;
 use File::Copy;
-
+use Env qw(OMNIHOME NCHOME R);
 
 sub new
 {
@@ -26,7 +26,8 @@ sub new
     my $invalid_file = shift || "";
     my $pre = shift || "";
     my $post = shift || "";
-    my $white_list || "";
+    my $white_list = shift || "";
+    my $pa_server = shift || "";
     $self->{pre} = $pre;
     $self->{post} = $post;
     $self->{svnref} = $svnref;
@@ -44,6 +45,7 @@ sub new
     $self->{svn_type} = $svn_type;
     $self->{json} = $svn_type;
     $self->{white_list} = $white_list;
+    $self->{pa_server} = $pa_server;
     bless $self, $class;
     return $self;
 }
@@ -81,18 +83,16 @@ sub create_svn_container
     my @svn = <SVN>;
     foreach my $svnentry (@svn)
     {
-      if( $svnentry =~ m/"time": (.*),/ )
+      if($svnentry =~/\.[a-zA-Z]/ || $svnentry =~ m/"time": (.*),/)
       {
-        chomp($1);
-        $svnentry_timestamp = scalar(localtime($1));
-      }
-      if($svnentry =~/\.[a-zA-Z]/)
-      {
+
         if($svnentry =~/svn_content.json/)
         {
         }
         else
         {
+          chomp($1);
+          $svnentry_timestamp = scalar(localtime($1));
           # Convert paths like: /netcool/probes/rules/test-probes/trunk/svn_content.json
           # to actual paths on proe host
           $svnentry =~ s/^.*trunk\//$inpath/g;
@@ -113,14 +113,14 @@ sub create_svn_container
             # remove filename from corrected path
             $corrected_path =~ s/$tmpfile//g;
             chomp($corrected_path);
-
             $corrected_path = "/opt/netcool/etc/rules".$corrected_path;
             $svn_file_map{$tmpfile} = "$corrected_path";
+            $filedate{$tmpfile} = "$svnentry_timestamp";
           }
          # Check if file in svn contains multiple file extensions (eg .rules.orig.020314 - these files likely DO NOT belong in SVN)
           if($svnentry=~/(\.lookup\.|\.rules\.|\.pl\.)/)
           {
-  print "Invalid file?: $svnentry\n";
+            print "Invalid file?: $svnentry\n";
           }
         }
 
@@ -209,8 +209,6 @@ sub map_local_files
            {
              chomp($value,$_);
              $host_file_map{$_} = "$value";
-             #print "$_ -> $value\n";
-             #sleep 1;
            }
          }
         }
@@ -255,7 +253,7 @@ sub setup
     my $self = shift;
     my $cfg = shift;
     my ($param1,$param2);
-    open CFGFILE, "$cfg" or die "Prolems opening : $!";
+    open CFGFILE, "$cfg" or die "Problems opening : $!";
     foreach my $line (<CFGFILE>)
     {
         #GET line: main: "<rules_file_name.rules>"
@@ -274,7 +272,6 @@ sub setup
             chomp($tmp);
             $self->{probe_dir} = $tmp;
         }
-        # GET line: "nco_p_syntax:/opt/netcool/omnibus/probes/nco_p_syntax -server <SERVER> -rulesfile"
         if($line =~ m/nco_p_syntax/)
         {
             ($param1, $param2) = split(':',$line);
@@ -302,20 +299,28 @@ sub setup
             $tmp = $param2;
             chomp($tmp);
             $self->{json} = $tmp;
-		}
+        }
        if($line =~ m/invalid_files/)
        {
             ($param1, $param2) = split(':',$line);
             $tmp = $param2;
             chomp($tmp);
-            $self->{delete} = $tmp;
+            $self->{invalid_file} = $tmp;
        }
        if($line =~ m/pre/)
        {
+           ($param1, $param2) = split(':',$line);
+            $tmp = $param2;
+            chomp($tmp);
+            $self->{pre} = $tmp;
 
        }
        if($line =~ m/post/)
        {
+       ($param1, $param2) = split(':',$line);
+            $tmp = $param2;
+            chomp($tmp);
+            $self->{post} = $tmp;
 
        }
        if($line =~ m/white_list/)
@@ -325,7 +330,13 @@ sub setup
             chomp($tmp);
             $self->{white_list} = $tmp;
        }
-
+           if($line =~ m/pa_name/)
+       {
+            ($param1, $param2) = split(':',$line);
+            $tmp = $param2;
+            chomp($tmp);
+            $self->{pa_server} = $tmp;
+       }
     }
     return $self;
 }
